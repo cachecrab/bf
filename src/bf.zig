@@ -21,17 +21,6 @@ pub const Inst = struct {
     jnz: ?*Inst = null,
 };
 
-const Token = enum {
-    Incr,
-    Decr,
-    Right,
-    Left,
-    BegLoop,
-    EndLoop,
-    Input,
-    Output,
-};
-
 pub const ParseError = error{
     UnexpectedClosingBracket,
     MissingClosingBracket,
@@ -142,6 +131,17 @@ test "parse" {
     try expect(null, inner2.jez);
 }
 
+const Token = enum {
+    Incr,
+    Decr,
+    Right,
+    Left,
+    BegLoop,
+    EndLoop,
+    Input,
+    Output,
+};
+
 /// A Block is a partial instruction parsing result, namely as many
 /// tokens have been fused into the Inst as possible,
 /// excluding loop constructs (jez and jnz both null).
@@ -225,6 +225,46 @@ fn consumeBlock(cursor: *[]const u8, prepend: ?Token) ?Block {
     return Block{ .inst = inst, .next_tok = token };
 }
 
+test "consumeBlock" {
+    // todo better test but this should be good enough for development,
+    // gives me high confidence all of it is correct
+
+    const expect = std.testing.expectEqual;
+
+    const program =
+        \\++- > -
+        \\--<<<>...,
+    ;
+
+    const expectedInstructions = .{
+        Inst{
+            .add = 1,
+            .shift = 1,
+        },
+        Inst{
+            .add = -3,
+            .shift = -2,
+            .output = 3,
+        },
+        Inst{
+            .input = 1,
+        },
+    };
+
+    var cursor: []const u8 = program;
+    var prepend: ?Token = null;
+
+    inline for (expectedInstructions) |inst| {
+        const res = consumeBlock(&cursor, prepend).?;
+        try expect(inst, res.inst);
+        prepend = res.next_tok;
+    }
+
+    inline for (0..69) |_| {
+        try expect(null, consumeBlock(&cursor, prepend));
+    }
+}
+
 fn consumeToken(cursor: *[]const u8) ?Token {
     var copy = cursor.*;
     defer cursor.* = copy;
@@ -274,45 +314,5 @@ test "consumeToken" {
     // just to be sure
     inline for (0..69) |_| {
         try expect(null, consumeToken(&cursor));
-    }
-}
-
-test "consumeBlock" {
-    // todo better test but this should be good enough for development,
-    // gives me high confidence all of it is correct
-
-    const expect = std.testing.expectEqual;
-
-    const program =
-        \\++- > -
-        \\--<<<>...,
-    ;
-
-    const expectedInstructions = .{
-        Inst{
-            .add = 1,
-            .shift = 1,
-        },
-        Inst{
-            .add = -3,
-            .shift = -2,
-            .output = 3,
-        },
-        Inst{
-            .input = 1,
-        },
-    };
-
-    var cursor: []const u8 = program;
-    var prepend: ?Token = null;
-
-    inline for (expectedInstructions) |inst| {
-        const res = consumeBlock(&cursor, prepend).?;
-        try expect(inst, res.inst);
-        prepend = res.next_tok;
-    }
-
-    inline for (0..69) |_| {
-        try expect(null, consumeBlock(&cursor, prepend));
     }
 }
