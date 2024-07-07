@@ -13,13 +13,99 @@ inline fn fallibleSub(a: anytype, b: anytype) ?@TypeOf(a, b) {
 }
 
 pub const Inst = struct {
-    add: i32 = 0,
+    add: i8 = 0,
     shift: i32 = 0,
     input: u32 = 0,
     output: u32 = 0,
     jez: ?*Inst = null,
     jnz: ?*Inst = null,
 };
+
+pub const RuntimeError = error{
+    StdinReadError,
+    StdoutWriteError,
+    OutOfBounds,
+};
+
+pub fn interpret(root: *Inst, tape: []u8, out: std.io.AnyWriter) RuntimeError!void {
+    const stdin = std.io.getStdIn().reader();
+
+    const upperTapeBound = tape.len;
+
+    var tapeIndex: usize = 0;
+
+    var inst: ?*Inst = root;
+    while (inst) |i| {
+        const copy = i.*;
+
+        // With a wrapping add we can just bitCast to preserve two's compliment
+        // and get subtraction for free
+        //
+        // tape[tapeIndex]: u8
+        // copy.add: i8
+        tape[tapeIndex] +%= @bitCast(copy.add);
+
+        // Putting old version in version control so I can reference in article
+        // if (copy.add > 0) {
+        //     const asu8: u8 = @intCast(copy.add);
+        //     tape[tapeIndex], _ = @addWithOverflow(tape[tapeIndex], asu8);
+        // } else {
+        //     const asu8: u8 = @intCast(-copy.add);
+        //     tape[tapeIndex], _ = @subWithOverflow(tape[tapeIndex], asu8);
+        // }
+        // tape[tapeIndex] +%= @bitCast(copy.add);
+
+        if (copy.shift > 0) {
+            tapeIndex += @intCast(copy.shift);
+            if (tapeIndex > upperTapeBound) {
+                return RuntimeError.OutOfBounds;
+            }
+        } else if (copy.shift < 0) {
+            const lShift: usize = @intCast(-copy.shift);
+            if (lShift > tapeIndex) {
+                return RuntimeError.OutOfBounds;
+            }
+            tapeIndex -= lShift;
+        }
+
+        for (0..copy.input) |_| {
+            tape[tapeIndex] = stdin.readByte() catch return RuntimeError.StdinReadError;
+        }
+
+        if (copy.output > 0) {
+            out.writeByteNTimes(tape[tapeIndex], copy.output) catch return RuntimeError.StdoutWriteError;
+        }
+
+        inst = if (tape[tapeIndex] == 0) copy.jez else copy.jnz;
+    }
+}
+
+test "interpret" {
+    const testing = std.testing;
+
+    const helloWorld = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+
+    var instAlloc = ArenaAllocator.init(testing.allocator);
+    defer instAlloc.deinit();
+
+    const parsed = try parse(helloWorld, &instAlloc, testing.allocator);
+    const root = parsed.?;
+
+    var stdoutBuf = std.ArrayList(u8).init(testing.allocator);
+    defer stdoutBuf.deinit();
+    const stdout = stdoutBuf.writer().any();
+
+    const tape = try testing.allocator.alloc(u8, 1024);
+    for (tape) |*b| {
+        b.* = 0;
+    }
+    defer testing.allocator.free(tape);
+
+    try interpret(root, tape, stdout);
+
+    const helloWorldOuput: []const u8 = "Hello World!\n";
+    try testing.expectEqualStrings(helloWorldOuput, stdoutBuf.items);
+}
 
 pub const ParseError = error{
     UnexpectedClosingBracket,
@@ -111,14 +197,16 @@ test "parse" {
 
     const tempAlloc = testing.allocator;
 
-    const res = try parse("++[->++<]", &instAlloc, tempAlloc);
+    const res = try parse("++[->++<]--.", &instAlloc, tempAlloc);
     const inst = res.?;
 
     try expect(2, inst.add);
-    try expect(null, inst.jez);
+    try assert(null != inst.jez);
     try assert(null != inst.jnz);
 
     const inner = inst.jnz.?;
+    const end = inst.jez.?;
+
     try expect(-1, inner.add);
     try expect(1, inner.shift);
     try assert(null != inner.jnz);
@@ -128,7 +216,10 @@ test "parse" {
     try expect(2, inner2.add);
     try expect(-1, inner2.shift);
     try expect(inner, inner2.jnz.?);
-    try expect(null, inner2.jez);
+    try expect(end, inner2.jez);
+
+    try expect(-2, end.add);
+    try expect(1, end.output);
 }
 
 const Token = enum {
