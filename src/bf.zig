@@ -97,7 +97,7 @@ test "interpret" {
 
     const tape = try testing.allocator.alloc(u8, 1024);
     defer testing.allocator.free(tape);
-    for (0..tape.len) |i| tape[i] = 0;
+    @memset(tape, 0);
 
     try interpret(root, tape, stdout);
 
