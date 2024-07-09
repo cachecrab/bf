@@ -30,9 +30,9 @@ pub const RuntimeError = error{
 pub fn interpret(root: *Inst, tape: []u8, out: std.io.AnyWriter) RuntimeError!void {
     const stdin = std.io.getStdIn().reader();
 
-    const upperTapeBound = tape.len;
+    const tape_upper_bound = tape.len;
 
-    var tapeIndex: usize = 0;
+    var tape_index: usize = 0;
 
     var inst: ?*Inst = root;
     while (inst) |i| {
@@ -43,7 +43,7 @@ pub fn interpret(root: *Inst, tape: []u8, out: std.io.AnyWriter) RuntimeError!vo
         //
         // tape[tapeIndex]: u8
         // copy.add: i8
-        tape[tapeIndex] +%= @bitCast(copy.add);
+        tape[tape_index] +%= @bitCast(copy.add);
 
         // Putting old version in version control so I can reference in article
         // if (copy.add > 0) {
@@ -56,44 +56,44 @@ pub fn interpret(root: *Inst, tape: []u8, out: std.io.AnyWriter) RuntimeError!vo
         // tape[tapeIndex] +%= @bitCast(copy.add);
 
         if (copy.shift > 0) {
-            tapeIndex += @intCast(copy.shift);
-            if (tapeIndex > upperTapeBound) {
+            tape_index += @intCast(copy.shift);
+            if (tape_index > tape_upper_bound) {
                 return RuntimeError.OutOfBounds;
             }
         } else if (copy.shift < 0) {
-            const lShift: usize = @intCast(-copy.shift);
-            if (lShift > tapeIndex) {
+            const l_shift: usize = @intCast(-copy.shift);
+            if (l_shift > tape_index) {
                 return RuntimeError.OutOfBounds;
             }
-            tapeIndex -= lShift;
+            tape_index -= l_shift;
         }
 
         for (0..copy.input) |_| {
-            tape[tapeIndex] = stdin.readByte() catch return RuntimeError.StdinReadError;
+            tape[tape_index] = stdin.readByte() catch return RuntimeError.StdinReadError;
         }
 
         if (copy.output > 0) {
-            out.writeByteNTimes(tape[tapeIndex], copy.output) catch return RuntimeError.StdoutWriteError;
+            out.writeByteNTimes(tape[tape_index], copy.output) catch return RuntimeError.StdoutWriteError;
         }
 
-        inst = if (tape[tapeIndex] == 0) copy.jez else copy.jnz;
+        inst = if (tape[tape_index] == 0) copy.jez else copy.jnz;
     }
 }
 
 test "interpret" {
     const testing = std.testing;
 
-    const helloWorld = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+    const hello_world = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
 
-    var instAlloc = ArenaAllocator.init(testing.allocator);
-    defer instAlloc.deinit();
+    var inst_alloc = ArenaAllocator.init(testing.allocator);
+    defer inst_alloc.deinit();
 
-    const parsed = try parse(helloWorld, &instAlloc, testing.allocator);
+    const parsed = try parse(hello_world, &inst_alloc, testing.allocator);
     const root = parsed.?;
 
-    var stdoutBuf = std.ArrayList(u8).init(testing.allocator);
-    defer stdoutBuf.deinit();
-    const stdout = stdoutBuf.writer().any();
+    var stdout_buf = std.ArrayList(u8).init(testing.allocator);
+    defer stdout_buf.deinit();
+    const stdout = stdout_buf.writer().any();
 
     const tape = try testing.allocator.alloc(u8, 1024);
     defer testing.allocator.free(tape);
@@ -101,8 +101,8 @@ test "interpret" {
 
     try interpret(root, tape, stdout);
 
-    const helloWorldOuput: []const u8 = "Hello World!\n";
-    try testing.expectEqualStrings(helloWorldOuput, stdoutBuf.items);
+    const hello_world_output: []const u8 = "Hello World!\n";
+    try testing.expectEqualStrings(hello_world_output, stdout_buf.items);
 }
 
 pub const ParseError = error{
@@ -110,27 +110,27 @@ pub const ParseError = error{
     MissingClosingBracket,
 } || Allocator.Error;
 
-pub fn parse(program: []const u8, instAlloc: *ArenaAllocator, tempAlloc: Allocator) ParseError!?*Inst {
+pub fn parse(program: []const u8, inst_alloc: *ArenaAllocator, temp_alloc: Allocator) ParseError!?*Inst {
     if (program.len == 0) {
         return null;
     }
 
-    const arena = instAlloc.allocator();
+    const arena = inst_alloc.allocator();
 
     // keep track of who's `jez` we need to set when we encounter an end loop
-    var beforeLoopBeginStack = std.ArrayList(*Inst).init(tempAlloc);
-    defer beforeLoopBeginStack.deinit();
+    var before_loop_begin_stack = std.ArrayList(*Inst).init(temp_alloc);
+    defer before_loop_begin_stack.deinit();
 
     var cursor: []const u8 = program;
 
-    const firstBlock = consumeBlock(&cursor, null) orelse return null;
+    const first_block = consumeBlock(&cursor, null) orelse return null;
 
     var inst: *Inst = try arena.create(Inst);
-    inst.* = firstBlock.inst;
+    inst.* = first_block.inst;
 
     const root = inst;
 
-    var block = firstBlock;
+    var block = first_block;
     while (true) {
         switch (block.next_tok orelse break) {
             .Incr, .Decr, .Right, .Left, .Input, .Output => {
@@ -140,44 +140,44 @@ pub fn parse(program: []const u8, instAlloc: *ArenaAllocator, tempAlloc: Allocat
                 const next = consumeBlock(&cursor, block.next_tok).?;
                 defer block = next;
 
-                const nextInst: *Inst = try arena.create(Inst);
-                nextInst.* = next.inst;
-                defer inst = nextInst;
+                const next_inst: *Inst = try arena.create(Inst);
+                next_inst.* = next.inst;
+                defer inst = next_inst;
 
-                inst.jez = nextInst;
-                inst.jnz = nextInst;
+                inst.jez = next_inst;
+                inst.jnz = next_inst;
             },
             .BegLoop => {
                 // Don't prepend b.next_tok, we want to skip the [
                 const next = consumeBlock(&cursor, null) orelse return ParseError.MissingClosingBracket;
                 defer block = next;
 
-                const nextInst: *Inst = try arena.create(Inst);
-                nextInst.* = next.inst;
-                defer inst = nextInst;
+                const next_inst: *Inst = try arena.create(Inst);
+                next_inst.* = next.inst;
+                defer inst = next_inst;
 
-                try beforeLoopBeginStack.append(inst);
-                inst.jnz = nextInst;
+                try before_loop_begin_stack.append(inst);
+                inst.jnz = next_inst;
             },
             .EndLoop => {
-                const beforeLoopBegin = beforeLoopBeginStack.popOrNull() orelse return ParseError.UnexpectedClosingBracket;
-                inst.jnz = beforeLoopBegin.jnz;
+                const before_loop_begin = before_loop_begin_stack.popOrNull() orelse return ParseError.UnexpectedClosingBracket;
+                inst.jnz = before_loop_begin.jnz;
 
                 // Don't prepend b.next_tok, we want to skip the ]
                 const next = consumeBlock(&cursor, null) orelse break;
                 defer block = next;
 
-                const nextInst: *Inst = try arena.create(Inst);
-                nextInst.* = next.inst;
-                defer inst = nextInst;
+                const next_inst: *Inst = try arena.create(Inst);
+                next_inst.* = next.inst;
+                defer inst = next_inst;
 
-                inst.jez = nextInst;
-                beforeLoopBegin.jez = nextInst;
+                inst.jez = next_inst;
+                before_loop_begin.jez = next_inst;
             },
         }
     }
 
-    if (beforeLoopBeginStack.items.len != 0) {
+    if (before_loop_begin_stack.items.len != 0) {
         return ParseError.MissingClosingBracket;
     }
 
@@ -190,12 +190,12 @@ test "parse" {
     const expect = testing.expectEqual;
     const assert = testing.expect;
 
-    var instAlloc = ArenaAllocator.init(testing.allocator);
-    defer instAlloc.deinit();
+    var inst_alloc = ArenaAllocator.init(testing.allocator);
+    defer inst_alloc.deinit();
 
-    const tempAlloc = testing.allocator;
+    const temp_alloc = testing.allocator;
 
-    const res = try parse("++[->++<]--.", &instAlloc, tempAlloc);
+    const res = try parse("++[->++<]--.", &inst_alloc, temp_alloc);
     const inst = res.?;
 
     try expect(2, inst.add);
@@ -325,7 +325,7 @@ test "consumeBlock" {
         \\--<<<>...,
     ;
 
-    const expectedInstructions = .{
+    const expected = .{
         Inst{
             .add = 1,
             .shift = 1,
@@ -343,7 +343,7 @@ test "consumeBlock" {
     var cursor: []const u8 = program;
     var prepend: ?Token = null;
 
-    inline for (expectedInstructions) |inst| {
+    inline for (expected) |inst| {
         const res = consumeBlock(&cursor, prepend).?;
         try expect(inst, res.inst);
         prepend = res.next_tok;
