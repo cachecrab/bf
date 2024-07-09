@@ -46,16 +46,6 @@ pub fn interpret(root: *Inst, tape: []u8, out: std.io.AnyWriter) RuntimeError!vo
         // copy.add: i8
         tape[tape_index] +%= @bitCast(copy.add);
 
-        // Putting old version in version control so I can reference in article
-        // if (copy.add > 0) {
-        //     const asu8: u8 = @intCast(copy.add);
-        //     tape[tapeIndex], _ = @addWithOverflow(tape[tapeIndex], asu8);
-        // } else {
-        //     const asu8: u8 = @intCast(-copy.add);
-        //     tape[tapeIndex], _ = @subWithOverflow(tape[tapeIndex], asu8);
-        // }
-        // tape[tapeIndex] +%= @bitCast(copy.add);
-
         if (copy.shift > 0) {
             tape_index += @intCast(copy.shift);
             if (tape_index > tape_upper_bound) {
@@ -118,7 +108,9 @@ pub fn parse(program: []const u8, inst_alloc: *ArenaAllocator, temp_alloc: Alloc
 
     const arena = inst_alloc.allocator();
 
-    // keep track of who's `jez` we need to set when we encounter an end loop
+    // Keep track of who's `jez` we need to set when we encounter an end loop.
+    // Instead of also storing a different stack for the first block inside of loops, we
+    // just follow the jnz in the block where jnz points to the first block.
     var before_loop_begin_stack = std.ArrayList(*Inst).init(temp_alloc);
     defer before_loop_begin_stack.deinit();
 
