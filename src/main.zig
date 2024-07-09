@@ -28,7 +28,7 @@ pub fn main() !void {
 
     const root = try bf.parse(file_contents, &inst_alloc, ally);
     if (root) |i| {
-        const tape = try ally.alloc(u8, 1024);
+        const tape = try ally.alloc(u8, 4096);
         defer ally.free(tape);
         @memset(tape, 0);
 
