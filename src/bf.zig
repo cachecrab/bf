@@ -96,10 +96,8 @@ test "interpret" {
     const stdout = stdoutBuf.writer().any();
 
     const tape = try testing.allocator.alloc(u8, 1024);
-    for (tape) |*b| {
-        b.* = 0;
-    }
     defer testing.allocator.free(tape);
+    for (0..tape.len) |i| tape[i] = 0;
 
     try interpret(root, tape, stdout);
 
