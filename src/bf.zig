@@ -13,10 +13,11 @@ inline fn fallibleSub(a: anytype, b: anytype) ?@TypeOf(a, b) {
 }
 
 pub const Inst = struct {
+    // Each BF cell is a wrapping u8 so don't need to store any high values
     add: i8 = 0,
     shift: i32 = 0,
-    input: u32 = 0,
-    output: u32 = 0,
+    input: u8 = 0,
+    output: u8 = 0,
     jez: ?*Inst = null,
     jnz: ?*Inst = null,
 };
