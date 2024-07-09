@@ -131,13 +131,13 @@ pub fn parse(program: []const u8, inst_alloc: *ArenaAllocator, temp_alloc: Alloc
     const root = inst;
 
     var block = first_block;
-    while (true) {
-        switch (block.next_tok orelse break) {
+    while (block.next_tok) |next_tok| {
+        switch (next_tok) {
             .Incr, .Decr, .Right, .Left, .Input, .Output => {
                 // Chain next block to current
 
                 // Safe .? as this switch prong means at least one fusable instruction in .next_tok
-                const next = consumeBlock(&cursor, block.next_tok).?;
+                const next = consumeBlock(&cursor, next_tok).?;
                 defer block = next;
 
                 const next_inst: *Inst = try arena.create(Inst);
