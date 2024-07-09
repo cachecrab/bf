@@ -25,6 +25,8 @@ or if you trust me
 zig build --release=fast
 ```
 
+The executable is in ./zig-out/bin/
+
 ## Running
 
 ```
